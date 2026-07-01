@@ -75,6 +75,18 @@
     <label>Dirección</label>
     <input type="text" id="direccion">
 
+    <label>Comuna</label>
+    <input type="text" id="comuna">
+
+    <label>RUT *</label>
+    <input type="text" id="rut" placeholder="12.345.678-9" required>
+
+    <label>Teléfono de emergencia</label>
+    <input type="tel" id="telefonoEmergencia" placeholder="+56 9 1234 5678">
+
+    <label>Ocupación</label>
+    <input type="text" id="ocupacion">
+
     <label>Fecha de nacimiento</label>
     <input type="date" id="fechaNacimiento">
 
@@ -97,6 +109,26 @@
     // Apps Script (la que termina en /exec). Es la misma que ya tienes.
     const API_URL = 'https://script.google.com/macros/s/AKfycbz7SvOi2JmjpRtLACJNVvzFtWKKeo9wUitjriZjW-JgNqPeFVliydyVy3NuNT6yiOcRbQ/exec';
 
+    // Valida el formato y dígito verificador de un RUT chileno.
+    function limpiarRut(rut) {
+      return String(rut || '').replace(/[^\dkK]/g, '').toUpperCase();
+    }
+    function validarRut(rutCompleto) {
+      const limpio = limpiarRut(rutCompleto);
+      if (limpio.length < 2) return false;
+      const cuerpo = limpio.slice(0, -1);
+      const dv = limpio.slice(-1);
+      let suma = 0;
+      let multiplo = 2;
+      for (let i = cuerpo.length - 1; i >= 0; i--) {
+        suma += multiplo * parseInt(cuerpo.charAt(i), 10);
+        multiplo = multiplo < 7 ? multiplo + 1 : 2;
+      }
+      const resto = 11 - (suma % 11);
+      const dvEsperado = resto === 11 ? '0' : (resto === 10 ? 'K' : String(resto));
+      return dv === dvEsperado;
+    }
+
     function llamarApi(accion, payload) {
       return fetch(API_URL, {
         method: 'POST',
@@ -114,9 +146,20 @@
 
       const nombre = document.getElementById('nombre').value.trim();
       const apellido = document.getElementById('apellido').value.trim();
+      const rut = document.getElementById('rut').value.trim();
 
       if (!nombre || !apellido) {
         errorDiv.textContent = 'Nombre y apellido son obligatorios.';
+        errorDiv.style.display = 'block';
+        return;
+      }
+      if (!rut) {
+        errorDiv.textContent = 'El RUT es obligatorio.';
+        errorDiv.style.display = 'block';
+        return;
+      }
+      if (!validarRut(rut)) {
+        errorDiv.textContent = 'El RUT no es válido. Revisa el formato (ej: 12345678-9).';
         errorDiv.style.display = 'block';
         return;
       }
@@ -124,9 +167,13 @@
       const datos = {
         nombre: nombre,
         apellido: apellido,
+        rut: rut,
         telefono: document.getElementById('telefono').value.trim(),
         email: document.getElementById('email').value.trim(),
         direccion: document.getElementById('direccion').value.trim(),
+        comuna: document.getElementById('comuna').value.trim(),
+        telefonoEmergencia: document.getElementById('telefonoEmergencia').value.trim(),
+        ocupacion: document.getElementById('ocupacion').value.trim(),
         fechaNacimiento: document.getElementById('fechaNacimiento').value
       };
 
@@ -136,7 +183,7 @@
       llamarApi('registrar', datos)
         .then(function (resp) {
           if (!resp.ok) throw new Error(resp.error || 'Error desconocido');
-          mostrarResultado(resp.data.idCliente, nombre);
+          mostrarResultado(resp.data.idCliente, nombre, resp.data.yaExistia);
         })
         .catch(function (err) {
           btn.disabled = false;
@@ -146,11 +193,17 @@
         });
     }
 
-    function mostrarResultado(idCliente, nombre) {
+    function mostrarResultado(idCliente, nombre, yaExistia) {
       document.getElementById('formulario').style.display = 'none';
       document.getElementById('resultado').style.display = 'block';
       document.getElementById('nombreSaludo').textContent = nombre;
       document.getElementById('idClienteTexto').textContent = idCliente;
+
+      if (yaExistia) {
+        document.querySelector('#resultado h2').textContent = '¡Ya tenías una cuenta, ' + nombre + '!';
+        document.querySelector('#resultado p').textContent =
+          'Encontramos tu registro anterior. Este sigue siendo tu código de acceso.';
+      }
 
       new QRCode(document.getElementById('qrcode'), {
         text: idCliente,
