@@ -25,6 +25,15 @@
     border: 1px solid #ccc;
     border-radius: 8px;
   }
+  select {
+    width: 100%;
+    padding: 10px;
+    font-size: 14px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    margin-top: 6px;
+    background: #fff;
+  }
   #reader { width: 100%; margin-top: 14px; border-radius: 8px; overflow: hidden; }
   #manualBox { margin-top: 10px; display: flex; gap: 8px; }
   #manualBox input { flex: 1; }
@@ -121,6 +130,14 @@
 
     let scanner = null;
     let escaneando = true;
+    let serviciosCache = [];
+
+    function cargarCatalogo() {
+      llamarApi('listarServicios', {})
+        .then(function (resp) {
+          if (resp.ok) serviciosCache = resp.data;
+        });
+    }
 
     function iniciarScanner() {
       scanner = new Html5Qrcode('reader');
@@ -174,22 +191,54 @@
       html += '<p style="font-size:12px;color:#888">' + cliente.idCliente + '</p>';
 
       if (!pases || pases.length === 0) {
-        html += '<div id="sinPases">Sin pases activos. Enviar a caja a comprar.</div>';
-        document.getElementById('resultado').innerHTML = html;
-        document.getElementById('nuevaLectura').style.display = 'block';
-        return;
+        html += '<div id="sinPases">Sin pases activos.</div>';
+      } else {
+        pases.forEach(function (p) {
+          html += '<div class="card">'
+            + '<h3>' + p.nombreServicio + '</h3>'
+            + '<p>Usos restantes: ' + p.usosRestantes + ' de ' + p.usosTotales + '</p>'
+            + (p.fechaVencimiento ? '<p>Vence: ' + new Date(p.fechaVencimiento).toLocaleDateString() + '</p>' : '')
+            + '<button onclick="confirmar(\'' + cliente.idCliente + '\',\'' + p.idPase + '\',\'' + staff.replace(/'/g, '') + '\', this)">Confirmar ingreso</button>'
+            + '</div>';
+        });
       }
 
-      pases.forEach(function (p) {
-        html += '<div class="card">'
-          + '<h3>' + p.nombreServicio + '</h3>'
-          + '<p>Usos restantes: ' + p.usosRestantes + ' de ' + p.usosTotales + '</p>'
-          + (p.fechaVencimiento ? '<p>Vence: ' + new Date(p.fechaVencimiento).toLocaleDateString() + '</p>' : '')
-          + '<button onclick="confirmar(\'' + cliente.idCliente + '\',\'' + p.idPase + '\',\'' + staff.replace(/'/g, '') + '\', this)">Confirmar ingreso</button>'
-          + '</div>';
-      });
+      html += '<div class="card" style="background:#f5f5f5">'
+        + '<h3>Cargar pase (ya cobrado en caja)</h3>'
+        + '<select id="selectServicio">' + opcionesServicios() + '</select>'
+        + '<button style="background:#1a1a1a" onclick="cargarPase(\'' + cliente.idCliente + '\', \'' + cliente.nombre + '\', \'' + cliente.apellido + '\', \'' + staff.replace(/'/g, '') + '\')">Cargar pase</button>'
+        + '</div>';
 
       document.getElementById('resultado').innerHTML = html;
+      document.getElementById('nuevaLectura').style.display = (!pases || pases.length === 0) ? 'block' : 'none';
+    }
+
+    function opcionesServicios() {
+      if (!serviciosCache.length) return '<option value="">(catálogo no cargado, recarga la página)</option>';
+      return serviciosCache.map(function (s) {
+        return '<option value="' + s.codigo + '">' + s.nombre + ' - $' + s.precio + '</option>';
+      }).join('');
+    }
+
+    function cargarPase(idCliente, nombre, apellido, staff) {
+      const select = document.getElementById('selectServicio');
+      const codigo = select.value;
+      if (!codigo) return;
+
+      llamarApi('cargarPase', { idCliente: idCliente, codigoServicio: codigo })
+        .then(function (resp) {
+          if (!resp.ok) throw new Error(resp.error);
+          document.getElementById('mensajeOk').style.display = 'block';
+          document.getElementById('mensajeOk').textContent = 'Pase cargado correctamente.';
+          // Vuelve a cargar los pases del cliente para mostrar el nuevo
+          return llamarApi('listarPases', { idCliente: idCliente });
+        })
+        .then(function (r2) {
+          if (r2 && r2.ok) {
+            renderPases({ idCliente: idCliente, nombre: nombre, apellido: apellido }, r2.data, staff);
+          }
+        })
+        .catch(mostrarError);
     }
 
     function confirmar(idCliente, idPase, staff, boton) {
@@ -222,6 +271,7 @@
       if (scanner) scanner.resume();
     }
 
+    cargarCatalogo();
     iniciarScanner();
   </script>
 </body>
