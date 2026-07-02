@@ -102,7 +102,9 @@
   <p class="sub">Escanea el código del cliente o ingrésalo manualmente.</p>
 
   <label>Validado por (tu nombre) *</label>
-  <input type="text" id="staff" placeholder="Nombre del staff" required>
+  <select id="staff">
+    <option value="">-- Selecciona tu nombre --</option>
+  </select>
 
   <div id="reader"></div>
 
@@ -144,6 +146,20 @@
       llamarApi('listarServicios', {})
         .then(function (resp) {
           if (resp.ok) serviciosCache = resp.data;
+        });
+    }
+
+    function cargarStaff() {
+      llamarApi('listarStaff', {})
+        .then(function (resp) {
+          if (!resp.ok || !resp.data) return;
+          const select = document.getElementById('staff');
+          resp.data.forEach(function (nombre) {
+            const opt = document.createElement('option');
+            opt.value = nombre;
+            opt.textContent = nombre;
+            select.appendChild(opt);
+          });
         });
     }
 
@@ -290,6 +306,7 @@
     }
 
     cargarCatalogo();
+    cargarStaff();
     iniciarScanner();
   </script>
 </body>
